@@ -18,6 +18,7 @@ namespace proyecto_urlshortener.Controllers
         }
 
         //Manejamos la solicitud POST y acortamos URL
+        //Aagregar que ingrese categoria
         [HttpPost]
         public IActionResult ShortenUrl(string url)
         {
@@ -45,7 +46,8 @@ namespace proyecto_urlshortener.Controllers
             return new string(urlShort);
         }
 
-        //Redirigir a la url original
+        //Tomar url corta, buscarla y redirigir a url larga
+        //Manejar la categoria tambien
         [HttpGet]
         public IActionResult DevolverUrl(string shortCode)
         {
