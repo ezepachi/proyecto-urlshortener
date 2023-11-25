@@ -1,77 +1,100 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Proyecto.Data.Implementations;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using proyecto_urlshortener.Entities;
+using System.Reflection.Emit;
+using System.Text;
+using URLShortener.Data.Implementations;
+using URLShortener.Data.Interfaces;
+using URLShortener.Models;
+using URLShortener.Helpers;
 
-namespace proyecto_urlshortener.Controllers
+namespace URLShortener.Controllers
 {
-
     [Route("api/[controller]")]
     [ApiController]
-
-    public class UrlShortController : Controller
+    public class UrlShortenerController : ControllerBase
     {
-        private readonly UrlShortenerContext _context;
+        private readonly IUrlService _urlRepository;
 
-        public UrlShortController(UrlShortenerContext context)
+        public UrlShortenerController(IUrlService urlRepository)
         {
-            _context = context;
+            _urlRepository = urlRepository;
         }
 
-        //Manejamos la solicitud POST y acortamos URL
-        //Aagregar que ingrese categoria
+        [HttpGet("{id}")]
+        public IActionResult GetUrlById(int id)
+        {
+            // Buscar la URL en la base de datos por su ID utilizando el repositorio
+            var url = _urlRepository.GetUrlById(id);
+
+            if (url == null)
+            {
+                return NotFound(); // Si no se encuentra la URL, devuelve un código 404 (Not Found)
+            }
+
+            // Devuelve la URL original en el cuerpo de la respuesta
+            return Ok(url.LongUrl);
+        }
+
         [HttpPost]
-        public IActionResult ShortenUrl(string url)
+        [ProducesResponseType(400)]
+        public IActionResult CreateShortUrl([FromBody] UrlCreationDto urlForCreation)
         {
-            //Generamos la logica para cortar el URL
-            string shortCode = GeneratedShortCode( url);
-            var urlMapping = new URLMapping
+            if (urlForCreation == null)
             {
-                LongUrl = url,
-                ShortUrl = shortCode
+                return BadRequest();
+            }
+            GeneratedShortCode ShortUrl = new GeneratedShortCode();
+            string shortUrl = ShortUrl.GenerateShortUrl();
+
+            // Crear una nueva entidad URL con la URL original y la URL corta
+            Url urlEntity = new Url
+            {
+                LongUrl = urlForCreation.LongUrl,
+                ShortUrl = shortUrl,
+                CategoryId = urlForCreation.IdCategory,
+                UserId = urlForCreation.UserId
             };
-            _context.URLMappings.Add(urlMapping);
-            _context.SaveChanges();
-            return Ok(urlMapping.shortCode);
+
+            // Agregar la entidad URL a la base de datos
+            _urlRepository.AddUrl(urlEntity);
+            _urlRepository.SaveChanges();
+
+            // Devolver una respuesta indicando que la URL corta se ha creado con éxito
+            return Created($"api/url/{shortUrl}", urlEntity);
         }
 
-        private string GeneratedShortCode(string url)
+        [HttpGet("redirectUrl/{shortUrl}")]
+        public IActionResult RedirectShortUrl(string shortUrl)
         {
-            const string charsTotal = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            var random = new Random();
-            char[] urlShort = new char[6];
-            for (int i = 0; i < 6; i++)
-            {
-                urlShort[i] = charsTotal[random.Next(charsTotal.Length)];
-            }
-            return new string(urlShort);
-        }
+            // Buscar la URL original en la base de datos por la URL corta utilizando el repositorio
+            Url url = _urlRepository.GetUrlByShortUrl(shortUrl);
 
-        //Tomar url corta, buscarla y redirigir a url larga
-        //Manejar la categoria tambien
-        [HttpGet]
-        public IActionResult DevolverUrl(string shortCode)
-        {
-            try
+            if (url == null)
             {
-                // Buscar la URL original en la base de datos
-                var urlMapping = _context.URLMappings.FirstOrDefault(mapping => mapping.ShortUrl == shortCode);
+                return NotFound(); // Si no se encuentra la URL, devuelve un código 404 (Not Found)
+            }
+            _urlRepository.IncrementClickCounter(url.Id);
+            // Realizar la redirección a la URL original
+            return Redirect(url.LongUrl);
 
-                if (urlMapping != null)
-                {
-                    // Redirigir al usuario a la URL original
-                    return Redirect(urlMapping.LongUrl);
-                }
-                else
-                {
-                    // Manejar la URL corta no encontrada (puede ser una página de error)
-                    return View("ShortCodeNotFound");
-                }
-            }
-            catch (Exception ex)
-            {
-              //  log.Error(ex, "Error en la acción Redirect");
-                return StatusCode(500, "Error interno del servidor");
-            }
         }
     }
 }
+
+
+//Controlador con ROLES
+//[Authorize] por controlador para veriifciar todo los endpoint para evitar [AllowAnonymus
+// para roles User.Claims(linq)
+
+//Controlador Endpoint authenticatcion
+//POST -> recibe credenciales DTo
+//Valido usuario -> User service
+//arma JWT -> paquetes
+//retorno JWT
+
+//En el Program, Authenticacion COPIAR Y PEGAR DEL PROGRAM!!
+//y el SwaggerGen
+
+//SI TIRA ERRO 401 HAY QUE  EN EL PROGRAM USAR APP.USE.AUTHENTICACION()
+
